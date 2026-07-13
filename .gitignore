@@ -1,0 +1,14 @@
+data.db
+
+database
+database.exe
+kvstore
+kvstore.exe
+
+coverage.out
+
+.vscode/
+.idea/
+
+.DS_Store
+Thumbs.db
