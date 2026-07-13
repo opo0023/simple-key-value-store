@@ -1,9 +1,9 @@
 data.db
 
-database
-database.exe
-kvstore
-kvstore.exe
+/database
+/database.exe
+/kvstore
+/kvstore.exe
 
 coverage.out
 
