@@ -108,6 +108,46 @@ func TestExistsCommand(t *testing.T) {
 	}
 }
 
+func TestMSetAndMGetCommands(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("MSET first 1 second 2 third 3")
+	runner.Execute("MGET first second missing third")
+
+	expected := "OK\n1\n2\nNULL\n3\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestMSetRejectsOddNumberOfArguments(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("MSET first 1 second")
+
+	expected := "ERROR MSET requires key-value pairs\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestMGetRequiresKey(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("MGET")
+
+	expected := "ERROR MGET requires at least 1 key\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
 func TestFlushDBCommand(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
@@ -146,5 +186,22 @@ func TestExitCommand(t *testing.T) {
 
 	if !shouldExit {
 		t.Fatal("expected EXIT to stop the program")
+	}
+}
+
+func TestExitRejectsArguments(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	shouldExit := runner.Execute("EXIT now")
+
+	if shouldExit {
+		t.Fatal("expected invalid EXIT command not to stop the program")
+	}
+
+	expected := "ERROR EXIT does not accept arguments\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
 	}
 }

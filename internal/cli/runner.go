@@ -9,13 +9,13 @@ import (
 	"github.com/opo0023/simple-key-value-store/internal/database"
 )
 
-// Runner reads commands and sends their output to a writer.
+// Runner reads commands and writes command results.
 type Runner struct {
 	db  *database.Database
 	out io.Writer
 }
 
-// NewRunner creates a command runner.
+// NewRunner creates a new CLI command runner.
 func NewRunner(db *database.Database, out io.Writer) *Runner {
 	return &Runner{
 		db:  db,
@@ -48,6 +48,12 @@ func (r *Runner) Execute(line string) bool {
 
 	case "EXISTS":
 		r.executeExists(parts)
+
+	case "MSET":
+		r.executeMSet(parts)
+
+	case "MGET":
+		r.executeMGet(parts)
 
 	case "FLUSHDB":
 		r.executeFlushDB(parts)
@@ -141,6 +147,50 @@ func (r *Runner) executeExists(parts []string) {
 		fmt.Fprintln(r.out, "1")
 	} else {
 		fmt.Fprintln(r.out, "0")
+	}
+}
+
+func (r *Runner) executeMSet(parts []string) {
+	args := parts[1:]
+
+	if len(args) == 0 || len(args)%2 != 0 {
+		r.printError("MSET requires key-value pairs")
+		return
+	}
+
+	for i := 0; i < len(args); i += 2 {
+		key := args[i]
+		value := args[i+1]
+
+		if err := r.db.Set(key, value); err != nil {
+			r.printError(err.Error())
+			return
+		}
+	}
+
+	fmt.Fprintln(r.out, "OK")
+}
+
+func (r *Runner) executeMGet(parts []string) {
+	if len(parts) < 2 {
+		r.printError("MGET requires at least 1 key")
+		return
+	}
+
+	for _, key := range parts[1:] {
+		value, err := r.db.Get(key)
+
+		if errors.Is(err, database.ErrNotFound) {
+			fmt.Fprintln(r.out, "NULL")
+			continue
+		}
+
+		if err != nil {
+			r.printError(err.Error())
+			return
+		}
+
+		fmt.Fprintln(r.out, value)
 	}
 }
 
