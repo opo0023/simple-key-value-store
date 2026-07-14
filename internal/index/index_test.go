@@ -108,6 +108,42 @@ func TestTTLWithExpiration(t *testing.T) {
 	}
 }
 
+func TestEntriesReturnsAllNonexpiredEntries(t *testing.T) {
+	store := New()
+
+	store.Set("apple", "red")
+	store.Set("banana", "yellow")
+	store.Set("cherry", "red")
+
+	entries := store.Entries()
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+}
+
+func TestEntriesRemovesExpiredEntries(t *testing.T) {
+	store := New()
+
+	store.Set("active", "yes")
+	store.Set("expired", "no")
+	store.SetExpiration("expired", time.Now().Unix()-1)
+
+	entries := store.Entries()
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	if entries[0].Key != "active" {
+		t.Fatalf("expected active, got %q", entries[0].Key)
+	}
+
+	if store.Exists("expired") {
+		t.Fatal("expected expired entry to be removed")
+	}
+}
+
 func TestClear(t *testing.T) {
 	store := New()
 	store.Set("first", "1")

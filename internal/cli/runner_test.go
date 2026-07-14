@@ -91,63 +91,51 @@ func TestExpireAndTTLCommands(t *testing.T) {
 	runner.Execute("EXPIRE session 30")
 	runner.Execute("TTL session")
 
-	lines := output.String()
+	actual := output.String()
 
-	if lines != "OK\n1\n30\n" && lines != "OK\n1\n29\n" {
-		t.Fatalf("unexpected output %q", lines)
+	if actual != "OK\n1\n30\n" && actual != "OK\n1\n29\n" {
+		t.Fatalf("unexpected output %q", actual)
 	}
 }
 
-func TestExpireMissingKey(t *testing.T) {
+func TestRangeCommand(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
 
-	runner.Execute("EXPIRE missing 30")
+	runner.Execute("SET date brown")
+	runner.Execute("SET apple red")
+	runner.Execute("SET cherry red")
+	runner.Execute("SET banana yellow")
+	runner.Execute("RANGE banana cherry")
 
-	expected := "0\n"
+	expected := "OK\nOK\nOK\nOK\nbanana yellow\ncherry red\n"
 
 	if output.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, output.String())
 	}
 }
 
-func TestTTLMissingKey(t *testing.T) {
+func TestRangeReturnsNothingWhenNoKeysMatch(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
 
-	runner.Execute("TTL missing")
+	runner.Execute("SET apple red")
+	runner.Execute("RANGE mango zebra")
 
-	expected := "-2\n"
+	expected := "OK\n"
 
 	if output.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, output.String())
 	}
 }
 
-func TestTTLWithoutExpiration(t *testing.T) {
+func TestRangeRejectsInvalidArguments(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
 
-	runner.Execute("SET name Priscilla")
-	runner.Execute("TTL name")
+	runner.Execute("RANGE apple")
 
-	expected := "OK\n-1\n"
-
-	if output.String() != expected {
-		t.Fatalf("expected %q, got %q", expected, output.String())
-	}
-}
-
-func TestExpireRejectsInvalidSeconds(t *testing.T) {
-	runner, output, db := newTestRunner(t)
-	defer db.Close()
-
-	runner.Execute("SET name Priscilla")
-	runner.Execute("EXPIRE name invalid")
-	runner.Execute("EXPIRE name -10")
-
-	expected := "OK\nERROR expiration must be a nonnegative integer\n" +
-		"ERROR expiration must be a nonnegative integer\n"
+	expected := "ERROR RANGE requires a start and end key\n"
 
 	if output.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, output.String())

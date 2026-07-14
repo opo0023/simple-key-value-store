@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -14,6 +15,12 @@ var (
 	ErrNotFound   = errors.New("key not found")
 	ErrNotInteger = errors.New("value is not an integer")
 )
+
+// RangeEntry represents one result from a range query.
+type RangeEntry struct {
+	Key   string
+	Value string
+}
 
 // Database connects the in-memory index to the append-only log.
 type Database struct {
@@ -153,6 +160,35 @@ func (db *Database) Expire(key string, seconds int64) (bool, error) {
 // -1 means the key exists without an expiration.
 func (db *Database) TTL(key string) int64 {
 	return db.index.TTL(key)
+}
+
+// Range returns keys between start and end, inclusive.
+//
+// Results are sorted lexicographically by key.
+func (db *Database) Range(start string, end string) []RangeEntry {
+	if start > end {
+		return []RangeEntry{}
+	}
+
+	entries := db.index.Entries()
+	results := make([]RangeEntry, 0)
+
+	for _, entry := range entries {
+		if entry.Key < start || entry.Key > end {
+			continue
+		}
+
+		results = append(results, RangeEntry{
+			Key:   entry.Key,
+			Value: entry.Value,
+		})
+	}
+
+	sort.Slice(results, func(left int, right int) bool {
+		return results[left].Key < results[right].Key
+	})
+
+	return results
 }
 
 // FlushDB removes all keys and empties the persistence log.

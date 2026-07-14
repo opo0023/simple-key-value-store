@@ -126,6 +126,38 @@ func (i *Index) TTL(key string) int64 {
 	return remaining
 }
 
+// Entries returns copies of all nonexpired entries.
+//
+// Expired entries are removed while the linked list is scanned.
+func (i *Index) Entries() []Entry {
+	entries := make([]Entry, 0)
+
+	var previous *Entry
+	current := i.Head
+	now := time.Now().Unix()
+
+	for current != nil {
+		next := current.Next
+
+		if isExpired(current, now) {
+			i.removeEntry(previous, current)
+			current = next
+			continue
+		}
+
+		entries = append(entries, Entry{
+			Key:       current.Key,
+			Value:     current.Value,
+			ExpiresAt: current.ExpiresAt,
+		})
+
+		previous = current
+		current = next
+	}
+
+	return entries
+}
+
 // Clear removes all entries.
 func (i *Index) Clear() {
 	i.Head = nil

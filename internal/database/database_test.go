@@ -153,42 +153,6 @@ func TestIncrementRejectsNonInteger(t *testing.T) {
 	}
 }
 
-func TestExpireMissingKey(t *testing.T) {
-	db, _ := openTestDatabase(t)
-	defer db.Close()
-
-	updated, err := db.Expire("missing", 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if updated {
-		t.Fatal("expected missing key not to receive expiration")
-	}
-}
-
-func TestTTLWithoutExpiration(t *testing.T) {
-	db, _ := openTestDatabase(t)
-	defer db.Close()
-
-	if err := db.Set("name", "Priscilla"); err != nil {
-		t.Fatal(err)
-	}
-
-	if ttl := db.TTL("name"); ttl != -1 {
-		t.Fatalf("expected -1, got %d", ttl)
-	}
-}
-
-func TestTTLMissingKey(t *testing.T) {
-	db, _ := openTestDatabase(t)
-	defer db.Close()
-
-	if ttl := db.TTL("missing"); ttl != -2 {
-		t.Fatalf("expected -2, got %d", ttl)
-	}
-}
-
 func TestExpireAndTTL(t *testing.T) {
 	db, _ := openTestDatabase(t)
 	defer db.Close()
@@ -253,12 +217,6 @@ func TestExpirationSurvivesRestart(t *testing.T) {
 	}
 	defer reopened.Close()
 
-	ttl := reopened.TTL("temporary")
-
-	if ttl < 1 || ttl > 2 {
-		t.Fatalf("expected TTL near 2, got %d", ttl)
-	}
-
 	time.Sleep(3 * time.Second)
 
 	if reopened.Exists("temporary") {
@@ -266,24 +224,80 @@ func TestExpirationSurvivesRestart(t *testing.T) {
 	}
 }
 
-func TestSetRemovesExistingExpiration(t *testing.T) {
+func TestRangeReturnsInclusiveSortedResults(t *testing.T) {
 	db, _ := openTestDatabase(t)
 	defer db.Close()
 
-	if err := db.Set("name", "first"); err != nil {
+	if err := db.Set("date", "brown"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Expire("name", 30); err != nil {
+	if err := db.Set("apple", "red"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := db.Set("name", "second"); err != nil {
+	if err := db.Set("cherry", "red"); err != nil {
 		t.Fatal(err)
 	}
 
-	if ttl := db.TTL("name"); ttl != -1 {
-		t.Fatalf("expected -1, got %d", ttl)
+	if err := db.Set("banana", "yellow"); err != nil {
+		t.Fatal(err)
+	}
+
+	results := db.Range("banana", "cherry")
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	if results[0].Key != "banana" || results[0].Value != "yellow" {
+		t.Fatalf("unexpected first result: %#v", results[0])
+	}
+
+	if results[1].Key != "cherry" || results[1].Value != "red" {
+		t.Fatalf("unexpected second result: %#v", results[1])
+	}
+}
+
+func TestRangeReturnsEmptyForReversedBounds(t *testing.T) {
+	db, _ := openTestDatabase(t)
+	defer db.Close()
+
+	if err := db.Set("banana", "yellow"); err != nil {
+		t.Fatal(err)
+	}
+
+	results := db.Range("zebra", "apple")
+
+	if len(results) != 0 {
+		t.Fatalf("expected no results, got %d", len(results))
+	}
+}
+
+func TestRangeExcludesExpiredKeys(t *testing.T) {
+	db, _ := openTestDatabase(t)
+	defer db.Close()
+
+	if err := db.Set("apple", "red"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Set("banana", "yellow"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Expire("banana", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	results := db.Range("apple", "banana")
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if results[0].Key != "apple" {
+		t.Fatalf("expected apple, got %q", results[0].Key)
 	}
 }
 

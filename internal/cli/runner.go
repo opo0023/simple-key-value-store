@@ -68,6 +68,9 @@ func (r *Runner) Execute(line string) bool {
 	case "TTL":
 		r.executeTTL(parts)
 
+	case "RANGE":
+		r.executeRange(parts)
+
 	case "FLUSHDB":
 		r.executeFlushDB(parts)
 
@@ -251,6 +254,19 @@ func (r *Runner) executeTTL(parts []string) {
 	}
 
 	fmt.Fprintln(r.out, r.db.TTL(parts[1]))
+}
+
+func (r *Runner) executeRange(parts []string) {
+	if len(parts) != 3 {
+		r.printError("RANGE requires a start and end key")
+		return
+	}
+
+	results := r.db.Range(parts[1], parts[2])
+
+	for _, result := range results {
+		fmt.Fprintf(r.out, "%s %s\n", result.Key, result.Value)
+	}
 }
 
 func (r *Runner) executeFlushDB(parts []string) {
