@@ -1,6 +1,9 @@
 package index
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSetAndGet(t *testing.T) {
 	store := New()
@@ -33,12 +36,15 @@ func TestLastWriteWins(t *testing.T) {
 	}
 }
 
-func TestGetMissingKey(t *testing.T) {
+func TestSetRemovesPreviousExpiration(t *testing.T) {
 	store := New()
 
-	_, exists := store.Get("missing")
-	if exists {
-		t.Fatal("expected missing key not to exist")
+	store.Set("name", "first")
+	store.SetExpiration("name", time.Now().Unix()+100)
+	store.Set("name", "second")
+
+	if ttl := store.TTL("name"); ttl != -1 {
+		t.Fatalf("expected TTL -1, got %d", ttl)
 	}
 }
 
@@ -46,30 +52,67 @@ func TestDelete(t *testing.T) {
 	store := New()
 	store.Set("name", "Priscilla")
 
-	deleted := store.Delete("name")
-	if !deleted {
+	if !store.Delete("name") {
 		t.Fatal("expected key to be deleted")
 	}
 
 	if store.Exists("name") {
-		t.Fatal("expected key not to exist after deletion")
+		t.Fatal("expected key not to exist")
 	}
 }
 
-func TestDeleteMissingKey(t *testing.T) {
+func TestExpiration(t *testing.T) {
+	store := New()
+	store.Set("temporary", "value")
+
+	if !store.SetExpiration("temporary", time.Now().Unix()-1) {
+		t.Fatal("expected expiration to be assigned")
+	}
+
+	if store.Exists("temporary") {
+		t.Fatal("expected expired key not to exist")
+	}
+}
+
+func TestTTLWithoutExpiration(t *testing.T) {
+	store := New()
+	store.Set("name", "Priscilla")
+
+	if ttl := store.TTL("name"); ttl != -1 {
+		t.Fatalf("expected -1, got %d", ttl)
+	}
+}
+
+func TestTTLMissingKey(t *testing.T) {
 	store := New()
 
-	deleted := store.Delete("missing")
-	if deleted {
-		t.Fatal("expected deleting a missing key to return false")
+	if ttl := store.TTL("missing"); ttl != -2 {
+		t.Fatalf("expected -2, got %d", ttl)
+	}
+}
+
+func TestTTLWithExpiration(t *testing.T) {
+	store := New()
+	store.Set("temporary", "value")
+
+	expiresAt := time.Now().Unix() + 30
+
+	if !store.SetExpiration("temporary", expiresAt) {
+		t.Fatal("expected expiration to be assigned")
+	}
+
+	ttl := store.TTL("temporary")
+
+	if ttl < 29 || ttl > 30 {
+		t.Fatalf("expected TTL near 30, got %d", ttl)
 	}
 }
 
 func TestClear(t *testing.T) {
 	store := New()
-
 	store.Set("first", "1")
 	store.Set("second", "2")
+
 	store.Clear()
 
 	if store.Exists("first") || store.Exists("second") {

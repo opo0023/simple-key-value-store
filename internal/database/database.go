@@ -4,24 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/opo0023/simple-key-value-store/internal/index"
 	"github.com/opo0023/simple-key-value-store/internal/persistence"
 )
 
-// ErrNotFound is returned when a key does not exist.
-var ErrNotFound = errors.New("key not found")
+var (
+	ErrNotFound   = errors.New("key not found")
+	ErrNotInteger = errors.New("value is not an integer")
+)
 
-// ErrNotInteger is returned when a value cannot be used as an integer.
-var ErrNotInteger = errors.New("value is not an integer")
-
-// Database connects the custom in-memory index to the append-only log.
+// Database connects the in-memory index to the append-only log.
 type Database struct {
 	index *index.Index
 	log   *persistence.Log
 }
 
-// Open opens the database and rebuilds the in-memory index from disk.
+// Open opens the database and replays persisted operations.
 func Open(path string) (*Database, error) {
 	log, err := persistence.Open(path)
 	if err != nil {
@@ -41,7 +41,7 @@ func Open(path string) (*Database, error) {
 	return db, nil
 }
 
-// Set persists and stores a key-value pair.
+// Set stores and persists a key-value pair.
 func (db *Database) Set(key string, value string) error {
 	if key == "" {
 		return errors.New("key cannot be empty")
@@ -70,7 +70,7 @@ func (db *Database) Get(key string) (string, error) {
 	return value, nil
 }
 
-// Delete removes a key and persists the deletion.
+// Delete removes and persists a key.
 func (db *Database) Delete(key string) (bool, error) {
 	if !db.index.Exists(key) {
 		return false, nil
@@ -94,9 +94,9 @@ func (db *Database) Exists(key string) bool {
 	return db.index.Exists(key)
 }
 
-// Increment changes a numeric key by the supplied amount.
+// Increment changes a numeric key by the provided amount.
 //
-// A missing key starts at zero.
+// Missing keys begin at zero.
 func (db *Database) Increment(key string, amount int64) (int64, error) {
 	current := int64(0)
 
@@ -119,7 +119,43 @@ func (db *Database) Increment(key string, amount int64) (int64, error) {
 	return result, nil
 }
 
-// FlushDB clears the index and truncates the persistence log.
+// Expire assigns a time-to-live to an existing key.
+func (db *Database) Expire(key string, seconds int64) (bool, error) {
+	if seconds < 0 {
+		return false, errors.New("expiration must be nonnegative")
+	}
+
+	if !db.index.Exists(key) {
+		return false, nil
+	}
+
+	expiresAt := time.Now().Unix() + seconds
+
+	record := persistence.Record{
+		Command: "EXPIRE_AT",
+		Args: []string{
+			key,
+			strconv.FormatInt(expiresAt, 10),
+		},
+	}
+
+	if err := db.log.Append(record); err != nil {
+		return false, err
+	}
+
+	db.index.SetExpiration(key, expiresAt)
+	return true, nil
+}
+
+// TTL returns the remaining lifetime of a key.
+//
+// -2 means the key does not exist.
+// -1 means the key exists without an expiration.
+func (db *Database) TTL(key string) int64 {
+	return db.index.TTL(key)
+}
+
+// FlushDB removes all keys and empties the persistence log.
 func (db *Database) FlushDB() error {
 	if err := db.log.Truncate(); err != nil {
 		return err
@@ -134,7 +170,6 @@ func (db *Database) Close() error {
 	return db.log.Close()
 }
 
-// applyRecord applies one persisted operation during startup recovery.
 func (db *Database) applyRecord(record persistence.Record) error {
 	switch record.Command {
 	case "SET":
@@ -150,6 +185,18 @@ func (db *Database) applyRecord(record persistence.Record) error {
 		}
 
 		db.index.Delete(record.Args[0])
+
+	case "EXPIRE_AT":
+		if len(record.Args) != 2 {
+			return fmt.Errorf("invalid EXPIRE_AT record")
+		}
+
+		expiresAt, err := strconv.ParseInt(record.Args[1], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid expiration timestamp: %w", err)
+		}
+
+		db.index.SetExpiration(record.Args[0], expiresAt)
 
 	default:
 		return fmt.Errorf("unknown persisted command: %s", record.Command)

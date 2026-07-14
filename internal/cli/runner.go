@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/opo0023/simple-key-value-store/internal/database"
@@ -15,7 +16,7 @@ type Runner struct {
 	out io.Writer
 }
 
-// NewRunner creates a new CLI command runner.
+// NewRunner creates a command runner.
 func NewRunner(db *database.Database, out io.Writer) *Runner {
 	return &Runner{
 		db:  db,
@@ -25,7 +26,7 @@ func NewRunner(db *database.Database, out io.Writer) *Runner {
 
 // Execute processes one command.
 //
-// It returns true when the program should exit.
+// It returns true when the application should exit.
 func (r *Runner) Execute(line string) bool {
 	line = strings.TrimSpace(line)
 
@@ -60,6 +61,12 @@ func (r *Runner) Execute(line string) bool {
 
 	case "DECR":
 		r.executeCounter(parts, -1)
+
+	case "EXPIRE":
+		r.executeExpire(parts)
+
+	case "TTL":
+		r.executeTTL(parts)
 
 	case "FLUSHDB":
 		r.executeFlushDB(parts)
@@ -165,10 +172,7 @@ func (r *Runner) executeMSet(parts []string) {
 	}
 
 	for i := 0; i < len(args); i += 2 {
-		key := args[i]
-		value := args[i+1]
-
-		if err := r.db.Set(key, value); err != nil {
+		if err := r.db.Set(args[i], args[i+1]); err != nil {
 			r.printError(err.Error())
 			return
 		}
@@ -213,6 +217,40 @@ func (r *Runner) executeCounter(parts []string, amount int64) {
 	}
 
 	fmt.Fprintln(r.out, result)
+}
+
+func (r *Runner) executeExpire(parts []string) {
+	if len(parts) != 3 {
+		r.printError("EXPIRE requires a key and seconds")
+		return
+	}
+
+	seconds, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || seconds < 0 {
+		r.printError("expiration must be a nonnegative integer")
+		return
+	}
+
+	updated, err := r.db.Expire(parts[1], seconds)
+	if err != nil {
+		r.printError(err.Error())
+		return
+	}
+
+	if updated {
+		fmt.Fprintln(r.out, "1")
+	} else {
+		fmt.Fprintln(r.out, "0")
+	}
+}
+
+func (r *Runner) executeTTL(parts []string) {
+	if len(parts) != 2 {
+		r.printError("TTL requires 1 argument")
+		return
+	}
+
+	fmt.Fprintln(r.out, r.db.TTL(parts[1]))
 }
 
 func (r *Runner) executeFlushDB(parts []string) {
