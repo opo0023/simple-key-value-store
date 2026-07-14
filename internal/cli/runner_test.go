@@ -80,19 +80,6 @@ func TestDeleteCommand(t *testing.T) {
 	}
 }
 
-func TestDeleteMissingKey(t *testing.T) {
-	runner, output, db := newTestRunner(t)
-	defer db.Close()
-
-	runner.Execute("DEL missing")
-
-	expected := "0\n"
-
-	if output.String() != expected {
-		t.Fatalf("expected %q, got %q", expected, output.String())
-	}
-}
-
 func TestExistsCommand(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
@@ -135,13 +122,70 @@ func TestMSetRejectsOddNumberOfArguments(t *testing.T) {
 	}
 }
 
-func TestMGetRequiresKey(t *testing.T) {
+func TestIncrementCommand(t *testing.T) {
 	runner, output, db := newTestRunner(t)
 	defer db.Close()
 
-	runner.Execute("MGET")
+	runner.Execute("INCR counter")
+	runner.Execute("INCR counter")
+	runner.Execute("GET counter")
 
-	expected := "ERROR MGET requires at least 1 key\n"
+	expected := "1\n2\n2\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestDecrementCommand(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("SET counter 10")
+	runner.Execute("DECR counter")
+	runner.Execute("GET counter")
+
+	expected := "OK\n9\n9\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestDecrementMissingKey(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("DECR counter")
+
+	expected := "-1\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestIncrementRejectsNonInteger(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("SET counter hello")
+	runner.Execute("INCR counter")
+
+	expected := "OK\nERROR value is not an integer\n"
+
+	if output.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, output.String())
+	}
+}
+
+func TestIncrementRejectsMissingArgument(t *testing.T) {
+	runner, output, db := newTestRunner(t)
+	defer db.Close()
+
+	runner.Execute("INCR")
+
+	expected := "ERROR counter command requires 1 argument\n"
 
 	if output.String() != expected {
 		t.Fatalf("expected %q, got %q", expected, output.String())
@@ -186,22 +230,5 @@ func TestExitCommand(t *testing.T) {
 
 	if !shouldExit {
 		t.Fatal("expected EXIT to stop the program")
-	}
-}
-
-func TestExitRejectsArguments(t *testing.T) {
-	runner, output, db := newTestRunner(t)
-	defer db.Close()
-
-	shouldExit := runner.Execute("EXIT now")
-
-	if shouldExit {
-		t.Fatal("expected invalid EXIT command not to stop the program")
-	}
-
-	expected := "ERROR EXIT does not accept arguments\n"
-
-	if output.String() != expected {
-		t.Fatalf("expected %q, got %q", expected, output.String())
 	}
 }

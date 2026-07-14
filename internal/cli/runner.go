@@ -55,6 +55,12 @@ func (r *Runner) Execute(line string) bool {
 	case "MGET":
 		r.executeMGet(parts)
 
+	case "INCR":
+		r.executeCounter(parts, 1)
+
+	case "DECR":
+		r.executeCounter(parts, -1)
+
 	case "FLUSHDB":
 		r.executeFlushDB(parts)
 
@@ -192,6 +198,21 @@ func (r *Runner) executeMGet(parts []string) {
 
 		fmt.Fprintln(r.out, value)
 	}
+}
+
+func (r *Runner) executeCounter(parts []string, amount int64) {
+	if len(parts) != 2 {
+		r.printError("counter command requires 1 argument")
+		return
+	}
+
+	result, err := r.db.Increment(parts[1], amount)
+	if err != nil {
+		r.printError(err.Error())
+		return
+	}
+
+	fmt.Fprintln(r.out, result)
 }
 
 func (r *Runner) executeFlushDB(parts []string) {

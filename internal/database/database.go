@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/opo0023/simple-key-value-store/internal/index"
 	"github.com/opo0023/simple-key-value-store/internal/persistence"
@@ -11,13 +12,16 @@ import (
 // ErrNotFound is returned when a key does not exist.
 var ErrNotFound = errors.New("key not found")
 
+// ErrNotInteger is returned when a value cannot be used as an integer.
+var ErrNotInteger = errors.New("value is not an integer")
+
 // Database connects the custom in-memory index to the append-only log.
 type Database struct {
 	index *index.Index
 	log   *persistence.Log
 }
 
-// Open opens the database and rebuilds the in-memory index from data.db.
+// Open opens the database and rebuilds the in-memory index from disk.
 func Open(path string) (*Database, error) {
 	log, err := persistence.Open(path)
 	if err != nil {
@@ -88,6 +92,31 @@ func (db *Database) Delete(key string) (bool, error) {
 // Exists reports whether a key exists.
 func (db *Database) Exists(key string) bool {
 	return db.index.Exists(key)
+}
+
+// Increment changes a numeric key by the supplied amount.
+//
+// A missing key starts at zero.
+func (db *Database) Increment(key string, amount int64) (int64, error) {
+	current := int64(0)
+
+	value, exists := db.index.Get(key)
+	if exists {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return 0, ErrNotInteger
+		}
+
+		current = parsed
+	}
+
+	result := current + amount
+
+	if err := db.Set(key, strconv.FormatInt(result, 10)); err != nil {
+		return 0, err
+	}
+
+	return result, nil
 }
 
 // FlushDB clears the index and truncates the persistence log.
